@@ -49,16 +49,6 @@ SimpleTimer timer_broadcast;
 WiFiUDP udp;
 
 //-------------main functions----------------------------------------
-/* delete in prodaction
-  void goFeed(String sval) {
-        int ival = sval.toInt();
-        servo.write(ival);
-          char msg[100];
-          strcpy(msg, "Servo has been moved to : ");
-          strcat(msg, sval.c_str());
-          server->send(200, "text/plain", msg);
-  }
-*/
   void doFeed(String sval) {
         int ival = sval.toInt();
         for(int a=0; a<ival; a++){
@@ -121,10 +111,9 @@ WiFiUDP udp;
  }
  String getID(){
   String str = WiFi.macAddress();
-  int j=0;
   String dev_id;
   for(int i=0; i <17; i++){
-      if(str[i]!=':'){ dev_id += str[i]; j++; }
+      if(str[i]!=':'){ dev_id += str[i]; }
       }
       return dev_id;
 }
@@ -271,13 +260,8 @@ void setup() {
     Serial.println("Starting http server...");
     server.reset(new ESP8266WebServer(WiFi.localIP(), 80));
         server->on("/whoami", [](){ 
-          server->send(200, "application/json", "{\"device_name\" : \"PetFeed\", \"version\" : " + DEV_VERSION + ", \"repository_host\" : " + REPOSITORY_HOST + ", \"repository_interval\" : " + REPOSITORY_INTERVAL + ", \"DID\" : " + DID + ", \"DHEX\" : " + DHEX + "}"); 
+          server->send(200, "application/json", "{\"device_name\" : \"PetFeed\", \"version\" : \"" + DEV_VERSION + "\", \"repository_host\" : \"" + REPOSITORY_HOST + "\", \"repository_interval\" : \"" + REPOSITORY_INTERVAL + "\", \"did\" : \"" + DID + "\", \"dhex\" : \"" + DHEX + "\"}"); 
         });
-        /* delete in production
-        server->on("/servo", [](){ 
-          goFeed(server->arg("val")); 
-        });
-        */
         server->on("/dofeed", [](){
           doFeed(server->arg("portion")); 
         });
