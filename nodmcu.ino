@@ -7,6 +7,7 @@
 #include <SimpleTimer.h>
 #include <ESP8266HTTPClient.h>
 #include <MD5Builder.h>
+#include <RtcDS3231.h>
 extern "C" {
   #include "user_interface.h"
 }
@@ -47,6 +48,7 @@ SimpleTimer timer_remote;
 SimpleTimer timer_vcc;
 SimpleTimer timer_broadcast;
 WiFiUDP udp;
+RtcDS3231 Rtc;
 
 //-------------main functions----------------------------------------
   void doFeed(String sval) {
@@ -64,14 +66,6 @@ WiFiUDP udp;
                  }
                  delay(200); // for fill the bank))
         }
-        server->send(200, "text/plain", "OK");
-        /* delete in prodaction
-          char msg[100];
-          strcpy(msg, "Performed cycles : ");
-          strcat(msg, sval.c_str());
-          
-          Serial.println("Eat and be quiet.");
-          */
   }
   void goblink(int i){ 
     if ((i%10) == 0){ 
@@ -130,7 +124,7 @@ void batteryCheck(){
    Serial.print("Curent voltage: "); Serial.println(String(vdd));   
   }
 }
-void checkConfig(){
+void checkConfigs(){
          SPIFFS.begin();
        if (!SPIFFS.open("/formated.txt", "r")){
              SPIFFS.format();
@@ -157,16 +151,51 @@ void setConfigParams(String repository_host, String repository_interval){
 String getConfigParam(String name){
        StaticJsonBuffer<200> jsonBuffer; 
        SPIFFS.begin();
-       File config = SPIFFS.open("/config.txt", "r");
-     if (config) {
-          String line = config.readStringUntil('\n');
-          config.close();
+       File configFile = SPIFFS.open("/config.txt", "r");
+     if (configFile) {
+          String line = configFile.readStringUntil('\n');
+          configFile.close();
           JsonObject& jdata = jsonBuffer.parseObject(line);
           String paramValue = jdata[name];
           return paramValue; 
           
      }else{
           return "";
+     }
+}
+void setSchedule(String jsonString){
+      File configFile = SPIFFS.open("/schedule.txt", "w+");
+       if (configFile) {
+       configFile.print(jsonString);
+       configFile.close();
+       }
+}
+String getSchedule(){
+       SPIFFS.begin();
+       File configFile = SPIFFS.open("/schedule.txt", "r");
+     if (configFile) {
+          String line = configFile.readStringUntil('\n');
+          configFile.close();
+          return line; 
+          
+     }else{
+          return "";
+     }
+}
+void parseSchedule(){
+       StaticJsonBuffer<200> jsonBuffer; 
+       StaticJsonBuffer<200> jsonBufferNested;
+       SPIFFS.begin();
+       File configFile = SPIFFS.open("/schedule.txt", "r");
+     if (configFile) {
+          String line = configFile.readStringUntil('\n');
+          configFile.close();
+          JsonObject& jdata = jsonBuffer.parseObject(line);
+           for(JsonObject::iterator it=jdata.begin(); it!=jdata.end(); ++it) {
+                //JsonObject& row = jsonBufferNested.parseObject(it->value);
+                      //  const char* key = it->key;
+                     // it->value contains the JsonVariant which can be casted as usual const char* value = it->value;
+          }  
      }
 }
 void initVars(){
@@ -215,6 +244,28 @@ void broadcast(){
    //Serial.println(" send endPacket");
    }   
 }
+void setCurrentTime(uint8_t year, uint8_t month, uint8_t day, uint8_t hour, uint8_t minute){
+   RtcDateTime setTime = RtcDateTime(year,month,day,hour,minute,0);
+   Rtc.SetDateTime(setTime); 
+}
+String getCurrentTime(){
+   if (Rtc.IsDateTimeValid()){
+    RtcDateTime currentTime = Rtc.GetDateTime(); 
+    char str[15];   //declare a string as an array of chars  
+    sprintf(str, "%d/%d/%d %d:%d:%d",     //%d allows to print an integer to the string
+                currentTime.Day(),               
+                currentTime.Month(),               
+                currentTime.Year(),                   
+                currentTime.Hour(),                
+                currentTime.Minute(),             
+                currentTime.Second()             
+           );
+           return str;
+   }else{
+           return "0";
+   }
+    
+}
 //------------- end main functions----------------------------------------  
 void setup() {
   pinMode(LED_PIN, OUTPUT);
@@ -251,7 +302,7 @@ void setup() {
     Serial.print("local ip: ");
     Serial.println(WiFi.localIP());
     
-    checkConfig(); //check whether config exist otherwise create
+    checkConfigs(); //check whether config exist otherwise create
     initVars(); // set vars
     timer_remote.setInterval(REPOSITORY_INTERVAL, checkRepository);
     timer_vcc.setInterval(POWERCHECK_INTERVAL, batteryCheck);
@@ -264,6 +315,7 @@ void setup() {
         });
         server->on("/dofeed", [](){
           doFeed(server->arg("portion")); 
+          server->send(200, "text/plain", String("OK"));
         });
          server->on("/vcc", [](){
           float vdd = ESP.getVcc();
@@ -280,9 +332,29 @@ void setup() {
           server->send(200, "text/plain", String("OK"));
           ESP.reset();
         });
+        server->on("/gettime", [](){
+          server->send(200, "text/plain", getCurrentTime());
+        });
+        server->on("/settime", [](){
+          uint8_t year  = atoi (server->arg("year").c_str ()); 
+          uint8_t month  = atoi (server->arg("month").c_str ()); 
+          uint8_t day  = atoi (server->arg("day").c_str ()); 
+          uint8_t hour  = atoi (server->arg("hour").c_str ()); 
+          uint8_t minute  = atoi (server->arg("minute").c_str ()); 
+          setCurrentTime(year, month, day, hour, minute);
+          server->send(200, "text/plain", String("OK"));
+        });
+        server->on("/getschedule", [](){
+          server->send(200, "text/plain", getSchedule());
+        });
+        server->on("/setschedule", [](){
+          setSchedule(server->arg("schedule"));
+          server->send(200, "text/plain", String("OK"));
+        });
         server->begin();
         Serial.println("Custom HTTP server started");
         udp.begin(UPDPORT);
+        Rtc.Begin();
         Serial.println("UPD server started");
         doblink(LED_PIN, 1, 5000);
   }
