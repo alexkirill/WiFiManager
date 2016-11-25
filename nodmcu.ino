@@ -25,6 +25,7 @@ const int LED_PIN = D7; //Diod pin
 const int MOTOR_PIN = D5; //Motor pin
 const String DEV_VERSION = "1.0";
 const int POWERCHECK_INTERVAL = 600000; // 10 min Check battery volage
+const int SCHEDULE_INTERVAL = 60000; // 1 min Check shedule volage
 const float VOLTAGE_THRESHOLD = 2710; // voltage threshold , mv
 const int BROADCAST_INTERVAL = 5000; // 5 sec broadcastinterval, milisecond
 unsigned int UPDPORT = 28031;
@@ -47,6 +48,7 @@ MD5Builder builder_md5;
 SimpleTimer timer_remote;
 SimpleTimer timer_vcc;
 SimpleTimer timer_broadcast;
+SimpleTimer timer_schedule;
 WiFiUDP udp;
 RtcDS3231 Rtc;
 
@@ -103,7 +105,7 @@ RtcDS3231 Rtc;
           doFeed(portion);
          } 
  }
- String getID(){
+String getID(){
   String str = WiFi.macAddress();
   String dev_id;
   for(int i=0; i <17; i++){
@@ -182,8 +184,9 @@ String getSchedule(){
           return "";
      }
 }
-void parseSchedule(){
-       StaticJsonBuffer<200> jsonBuffer; 
+void checkShedule(){
+       //json format : {"feed1":{"hour":"10", "minute":"10", "portion":"2"}, "feed2":{"hour":"10", "minute":"10", "portion":"2"}} ...feed5
+       StaticJsonBuffer<1000> jsonBuffer; 
        StaticJsonBuffer<200> jsonBufferNested;
        SPIFFS.begin();
        File configFile = SPIFFS.open("/schedule.txt", "r");
@@ -191,10 +194,25 @@ void parseSchedule(){
           String line = configFile.readStringUntil('\n');
           configFile.close();
           JsonObject& jdata = jsonBuffer.parseObject(line);
+               if (!jdata.success()){ Serial.println("parseObject() failed on 1 lap checkShedule"); return; }
            for(JsonObject::iterator it=jdata.begin(); it!=jdata.end(); ++it) {
-                //JsonObject& row = jsonBufferNested.parseObject(it->value);
-                      //  const char* key = it->key;
-                     // it->value contains the JsonVariant which can be casted as usual const char* value = it->value;
+               if(it->value.is<JsonObject>()){
+                JsonObject& ndata = it->value;
+                 if (!ndata.success()){ Serial.println("parseObject() failed on 2 lap checkShedule"); return; }
+                   const char* hour;
+                   const char* minute;
+                   const char* portion;
+                   for(JsonObject::iterator it2=ndata.begin(); it2!=ndata.end(); ++it2) {
+                    const char* key = it2->key;
+                    const char* value = it2->value;
+                    if(strcmp(key, "hour") == 0){ hour = value; }
+                    if(strcmp(key, "minute") == 0){ minute = value; }
+                    if(strcmp(key, "portion") == 0){ portion = value;  } 
+                   }
+                if(strcmp(hour, getNowHour().c_str()) == 0 && strcmp(minute, getNowMin().c_str()) == 0){
+                         doFeed(portion);
+                   }
+               }
           }  
      }
 }
@@ -202,13 +220,13 @@ void initVars(){
  DID = getID(); 
  DHEX = getHex(DID);
                             
-  String rhost = getConfigParam("repository_host");
+String rhost = getConfigParam("repository_host");
   if(rhost != ""){ 
     char *cstr = new char[rhost.length() + 1];
     rhost.toCharArray(cstr, rhost.length() + 1); 
  REPOSITORY_HOST = cstr;
   }
-  String rint = getConfigParam("repository_interval");
+String rint = getConfigParam("repository_interval");
   if(rint != ""){ 
  REPOSITORY_INTERVAL = rint.toInt()*60*1000;
   } 
@@ -263,8 +281,29 @@ String getCurrentTime(){
            return str;
    }else{
            return "0";
+   }  
+}
+String getNowHour(){
+   if (Rtc.IsDateTimeValid()){
+    RtcDateTime currentTime = Rtc.GetDateTime(); 
+    char str[15];   //declare a string as an array of chars  
+    sprintf(str, "%d", currentTime.Hour());
+           return str;
+   }else{
+           return "0";
    }
-    
+   
+}
+String getNowMin(){
+   if (Rtc.IsDateTimeValid()){
+    RtcDateTime currentTime = Rtc.GetDateTime(); 
+    char str[15];   //declare a string as an array of chars  
+    sprintf(str, "%d", currentTime.Minute());
+           return str;
+   }else{
+           return "0";
+   }
+   
 }
 //------------- end main functions----------------------------------------  
 void setup() {
@@ -307,6 +346,7 @@ void setup() {
     timer_remote.setInterval(REPOSITORY_INTERVAL, checkRepository);
     timer_vcc.setInterval(POWERCHECK_INTERVAL, batteryCheck);
     timer_broadcast.setInterval(BROADCAST_INTERVAL, broadcast);
+    timer_schedule.setInterval(SCHEDULE_INTERVAL, checkShedule);
     
     Serial.println("Starting http server...");
     server.reset(new ESP8266WebServer(WiFi.localIP(), 80));
@@ -387,5 +427,6 @@ void loop() {
   timer_remote.run();
   timer_vcc.run();
   timer_broadcast.run();
+  timer_schedule.run();
     }
 }
