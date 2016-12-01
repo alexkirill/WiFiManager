@@ -21,8 +21,11 @@ Servo servo;
  * until the computer is rebooted on windows machines.
  */
 const int TRIGGER_PIN = D3; // D3 on NodeMCU and WeMos.
-const int LED_PIN = D7; //Diod pin
 const int MOTOR_PIN = D5; //Motor pin
+const int LED_PIN_RED = D6; //Diod pin red
+const int LED_PIN_GREEN = D7; //Diod pin green
+const int LED_PIN_BLUE = D8; //Diod pin blue
+
 const String DEV_VERSION = "1.0";
 const int POWERCHECK_INTERVAL = 600000; // 10 min Check battery volage
 const int SCHEDULE_INTERVAL = 60000; // 1 min Check shedule volage
@@ -71,8 +74,8 @@ RtcDS3231 Rtc;
   }
   void goblink(int i){ 
     if ((i%10) == 0){ 
-  bool state = digitalRead(LED_PIN);
-  digitalWrite(LED_PIN, !state);
+  bool state = digitalRead(LED_PIN_GREEN);
+  digitalWrite(LED_PIN_GREEN, !state);
    }
   }
   void doblink(int pin, int count = 1, int timeout = 500){
@@ -185,7 +188,7 @@ String getSchedule(){
      }
 }
 void checkShedule(){
-       //json format : {"feed1":{"hour":"10", "minute":"10", "portion":"2"}, "feed2":{"hour":"10", "minute":"10", "portion":"2"}} ...feed5
+       //json format : {"1":{"hour":"10", "minute":"10", "portion":"2"}, "2":{"hour":"10", "minute":"10", "portion":"2"}} ...5
        StaticJsonBuffer<1000> jsonBuffer; 
        StaticJsonBuffer<200> jsonBufferNested;
        SPIFFS.begin();
@@ -269,18 +272,19 @@ void setCurrentTime(uint8_t year, uint8_t month, uint8_t day, uint8_t hour, uint
 String getCurrentTime(){
    if (Rtc.IsDateTimeValid()){
     RtcDateTime currentTime = Rtc.GetDateTime(); 
-    char str[15];   //declare a string as an array of chars  
-    sprintf(str, "%d/%d/%d %d:%d:%d",     //%d allows to print an integer to the string
-                currentTime.Day(),               
-                currentTime.Month(),               
-                currentTime.Year(),                   
-                currentTime.Hour(),                
-                currentTime.Minute(),             
-                currentTime.Second()             
-           );
-           return str;
+       String respond;
+       StaticJsonBuffer<400> jsonBuffer;
+       JsonObject& data = jsonBuffer.createObject();
+          data["year"] =   currentTime.Year();
+          data["month"] =  currentTime.Month();
+          data["day"] =    currentTime.Day();
+          data["hour"] =   currentTime.Hour();
+          data["minute"] = currentTime.Minute();
+          data["second"] = currentTime.Second();
+       data.printTo(respond);     
+           return respond;
    }else{
-           return "0";
+           return "";
    }  
 }
 String getNowHour(){
@@ -307,9 +311,14 @@ String getNowMin(){
 }
 //------------- end main functions----------------------------------------  
 void setup() {
-  pinMode(LED_PIN, OUTPUT);
   pinMode(TRIGGER_PIN, INPUT_PULLUP);
-  digitalWrite(LED_PIN, HIGH); //turn off led  
+  pinMode(LED_PIN_RED, OUTPUT);
+  pinMode(LED_PIN_BLUE, OUTPUT);
+  pinMode(LED_PIN_GREEN, OUTPUT);
+  digitalWrite(LED_PIN_RED, HIGH); //turn off led  
+  digitalWrite(LED_PIN_BLUE, HIGH); //turn off led 
+  digitalWrite(LED_PIN_GREEN, HIGH); //turn off led 
+  
   int start_time = millis(); // remember starttime
   servo.attach(MOTOR_PIN);
   servo.write(0); // initial position
@@ -396,7 +405,9 @@ void setup() {
         udp.begin(UPDPORT);
         Rtc.Begin();
         Serial.println("UPD server started");
-        doblink(LED_PIN, 1, 5000);
+        doblink(LED_PIN_RED, 1, 1500);
+        doblink(LED_PIN_BLUE, 1, 1500);
+        doblink(LED_PIN_GREEN, 1, 1500);
   }
 }
 
@@ -405,8 +416,7 @@ void loop() {
   if ((digitalRead(TRIGGER_PIN) == LOW) || (initialConfig)) {
     Serial.println("Configuration portal requested.");
      server.reset(new ESP8266WebServer(WiFi.localIP(), 80));
-     
-     digitalWrite(LED_BUILTIN, LOW); // turn the LED on by making the voltage LOW to tell us we are in configuration mode. Local intialization. Once its business is done, there is no need to keep it around
+     digitalWrite(LED_PIN_BLUE, LOW);
     WiFiManager wifiManager;
 
     //it starts an access point and goes into a blocking loop awaiting configuration
@@ -416,7 +426,6 @@ void loop() {
       //if you get here you have connected to the WiFi
       Serial.println("connected...yeey :)");
     }
-    digitalWrite(LED_BUILTIN, HIGH); // Turn led off as we are not in configuration mode.
     ESP.reset(); // This is a bit crude. For some unknown reason webserver can only be started once per boot up so resetting the device allows to go back into config mode again when it reboots.
     delay(5000);
   }
