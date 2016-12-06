@@ -34,7 +34,7 @@ const int BROADCAST_INTERVAL = 5000; // 5 sec broadcastinterval, milisecond
 unsigned int UPDPORT = 28031;
 
 int REPOSITORY_INTERVAL = 120000; // 2 min Repository interval check, milisecond
-char* REPOSITORY_HOST = "http://345.kiev.ua/1.php"; //Repository  full adress for remote job
+char* REPOSITORY_HOST = "http://petfeed.com.ua/dofeed/get"; //Repository  full adress for remote job
 String DID = ""; //device ID
 String DHEX = ""; //Device md5 hex id based
 
@@ -89,7 +89,7 @@ RtcDS3231 Rtc;
           HTTPClient http;
           http.begin(REPOSITORY_HOST);
           http.addHeader("Content-Type", "application/x-www-form-urlencoded");
-          http.POST("id=" + getID() + "&version=" + DEV_VERSION + "&appkey=" + DHEX);
+          http.POST("did=" + DID + "&version=" + DEV_VERSION + "&dhex=" + DHEX);
           String response = http.getString();
           http.end();
           CheckRemoteFeedback(response);  
@@ -102,9 +102,9 @@ RtcDS3231 Rtc;
          return;
          }
          //check server answer here. We are here only if json has been parsed successfuly
-         String devise_id = jobj["devise_id"];
+         String device_id = jobj["device_id"];
          String portion = jobj["portion"];
-         if(devise_id[0] != '\0'){
+         if(device_id[0] != '\0'){
           doFeed(portion);
          } 
  }
