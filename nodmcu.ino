@@ -25,10 +25,11 @@ const int MOTOR_PIN = D5; //Motor pin
 const int LED_PIN_RED = D6; //Diod pin red
 const int LED_PIN_GREEN = D7; //Diod pin green
 const int LED_PIN_BLUE = D8; //Diod pin blue
+const int OBSTACLE_PIN = D0; // Obstacle pin
 
 const String DEV_VERSION = "1.0";
-const int POWERCHECK_INTERVAL = 600000; // 10 min Check battery volage
-const int SCHEDULE_INTERVAL = 60000; // 1 min Check shedule volage
+const int POWERCHECK_INTERVAL = 600000; // 10 min Check battery voltage
+const int SCHEDULE_INTERVAL = 60000; // 1 min Check shedule 
 const float VOLTAGE_THRESHOLD = 2710; // voltage threshold , mv
 const int BROADCAST_INTERVAL = 5000; // 5 sec broadcastinterval, milisecond
 unsigned int UPDPORT = 28031;
@@ -89,7 +90,7 @@ RtcDS3231 Rtc;
           HTTPClient http;
           http.begin(REPOSITORY_HOST);
           http.addHeader("Content-Type", "application/x-www-form-urlencoded");
-          http.POST("did=" + DID + "&version=" + DEV_VERSION + "&dhex=" + DHEX);
+          http.POST("did=" + DID + "&version=" + DEV_VERSION + "&dhex=" + DHEX + "&tank=" + tankState());
           String response = http.getString();
           http.end();
           CheckRemoteFeedback(response);  
@@ -309,15 +310,24 @@ String getNowMin(){
    }
    
 }
+String tankState(){
+  if(digitalRead(OBSTACLE_PIN) == LOW){
+    return "FULL";
+  }else{
+    return "EMPTY";
+  }
+}
 //------------- end main functions----------------------------------------  
 void setup() {
   pinMode(TRIGGER_PIN, INPUT_PULLUP);
   pinMode(LED_PIN_RED, OUTPUT);
   pinMode(LED_PIN_BLUE, OUTPUT);
   pinMode(LED_PIN_GREEN, OUTPUT);
+  pinMode(OBSTACLE_PIN, INPUT);
   digitalWrite(LED_PIN_RED, HIGH); //turn off led  
   digitalWrite(LED_PIN_BLUE, HIGH); //turn off led 
   digitalWrite(LED_PIN_GREEN, HIGH); //turn off led 
+
   
   int start_time = millis(); // remember starttime
   servo.attach(MOTOR_PIN);
@@ -360,7 +370,7 @@ void setup() {
     Serial.println("Starting http server...");
     server.reset(new ESP8266WebServer(WiFi.localIP(), 80));
         server->on("/whoami", [](){ 
-          server->send(200, "application/json", "{\"device_name\" : \"PetFeed\", \"version\" : \"" + DEV_VERSION + "\", \"repository_host\" : \"" + REPOSITORY_HOST + "\", \"repository_interval\" : \"" + REPOSITORY_INTERVAL + "\", \"did\" : \"" + DID + "\", \"dhex\" : \"" + DHEX + "\"}"); 
+          server->send(200, "application/json", "{\"device_name\" : \"PetFeed\", \"version\" : \"" + DEV_VERSION + "\", \"repository_host\" : \"" + REPOSITORY_HOST + "\", \"repository_interval\" : \"" + REPOSITORY_INTERVAL + "\", \"did\" : \"" + DID + "\", \"dhex\" : \"" + DHEX + "\", \"tank\" : \"" + tankState() + "\"}"); 
         });
         server->on("/dofeed", [](){
           doFeed(server->arg("portion")); 
