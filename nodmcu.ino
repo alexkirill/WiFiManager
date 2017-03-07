@@ -20,12 +20,14 @@ Servo servo;
  * Flash button is convenient to use but if it is pressed it will stuff up the serial port device driver 
  * until the computer is rebooted on windows machines.
  */
+const int OBSTACLE_PIN = D0; // Obstacle pin
+/*D1, D2 - SLA, SLC realtimeclock */
 const int TRIGGER_PIN = D3; // D3 on NodeMCU and WeMos.
 const int MOTOR_PIN = D5; //Motor pin
 const int LED_PIN_RED = D6; //Diod pin red
 const int LED_PIN_GREEN = D7; //Diod pin green
 const int LED_PIN_BLUE = D8; //Diod pin blue
-const int OBSTACLE_PIN = D0; // Obstacle pin
+const int OBSTACLE_POWER_PIN = A0;
 
 const String DEV_VERSION = "1.0";
 const int POWERCHECK_INTERVAL = 600000; // 10 min Check battery voltage
@@ -39,11 +41,6 @@ char* REPOSITORY_HOST = "http://petfeed.com.ua/dofeed/get"; //Repository  full a
 String DID = ""; //device ID
 String DHEX = ""; //Device md5 hex id based
 
-/*
- * Alternative trigger pin. Needs to be connected to a button to use this pin. It must be a momentary connection
- * not connected permanently to ground. Either trigger pin will work.
- * const int TRIGGER_PIN2 = 13; // D7 on NodeMCU and WeMos.
-*/
 
 bool initialConfig = false; // Indicates whether ESP has WiFi credentials saved from previous session
 ADC_MODE(ADC_VCC); //for voltage measuring
@@ -59,19 +56,31 @@ RtcDS3231 Rtc;
 //-------------main functions----------------------------------------
   void doFeed(String sval) {
         int ival = sval.toInt();
+        
         for(int a=0; a<ival; a++){
               for(int i=0; i<180; i++){
                  goblink(i);
                  servo.write(i);
+                 i = positionTest(i);
                  delay(10);
                  }
                  for(int i=180; i>0; i--){
                  goblink(i);
                  servo.write(i);
+                 i = positionTest(i);
                  delay(5);
                  }
                  delay(200); // for fill the bank))
         }
+  }
+  int positionTest(int i){
+    if(servo.read() < (i+10)){
+      int j = i-45;
+      servo.write(j);
+      delay(500);
+      i=j;
+    }
+    return i;
   }
   void goblink(int i){ 
     if ((i%10) == 0){ 
@@ -311,27 +320,34 @@ String getNowMin(){
    
 }
 String tankState(){
+   digitalWrite(OBSTACLE_POWER_PIN, LOW);
+   delay(500);
   if(digitalRead(OBSTACLE_PIN) == LOW){
     return "FULL";
   }else{
     return "EMPTY";
   }
+   digitalWrite(OBSTACLE_POWER_PIN, HIGH);
 }
+
 //------------- end main functions----------------------------------------  
 void setup() {
   pinMode(TRIGGER_PIN, INPUT_PULLUP);
+  pinMode(MOTOR_PIN, OUTPUT);
   pinMode(LED_PIN_RED, OUTPUT);
   pinMode(LED_PIN_BLUE, OUTPUT);
   pinMode(LED_PIN_GREEN, OUTPUT);
+  pinMode(OBSTACLE_POWER_PIN, OUTPUT);
   pinMode(OBSTACLE_PIN, INPUT);
   digitalWrite(LED_PIN_RED, HIGH); //turn off led  
   digitalWrite(LED_PIN_BLUE, HIGH); //turn off led 
   digitalWrite(LED_PIN_GREEN, HIGH); //turn off led 
-
+  digitalWrite(OBSTACLE_POWER_PIN, HIGH); //power off obstacle sensor
+  digitalWrite(MOTOR_PIN, HIGH); //power off motor pin 360 servo
   
   int start_time = millis(); // remember starttime
   servo.attach(MOTOR_PIN);
-  servo.write(0); // initial position
+  servo.write(0); // initial position for normal servo!!!!
   
   Serial.begin(115200);
   Serial.print("\n Starting at :");
@@ -418,6 +434,8 @@ void setup() {
         doblink(LED_PIN_RED, 1, 1500);
         doblink(LED_PIN_BLUE, 1, 1500);
         doblink(LED_PIN_GREEN, 1, 1500);
+        
+        wifi_set_sleep_type(LIGHT_SLEEP_T);
   }
 }
 
@@ -442,10 +460,12 @@ void loop() {
 
   // put your main code here, to run repeatedly:
     if (WiFi.status()==WL_CONNECTED){
+            delay(200); //for sleep mode
   server->handleClient();
   timer_remote.run();
   timer_vcc.run();
   timer_broadcast.run();
   timer_schedule.run();
-    }
+    } 
+
 }
